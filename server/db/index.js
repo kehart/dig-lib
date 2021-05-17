@@ -1,11 +1,14 @@
 const mysql = require('mysql');
 const uuid = require('uuid');
 const sha256 = require('js-sha256');
+const dotenv = require('dotenv')
+
+dotenv.config()
 
 const pool = mysql.createPool({
     connectionLimit: 10,
-    password: '#Madrosc26',
-    user: 'root',
+    password: process.env.SQL_PW,
+    user: process.env.SQL_USER,
     host: 'localhost',
     database: 'library',
     port: '3306'
