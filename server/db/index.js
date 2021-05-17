@@ -4,8 +4,8 @@ const sha256 = require('js-sha256');
 
 const pool = mysql.createPool({
     connectionLimit: 10,
-    password: 'pword',
-    user: 'user',
+    password: '#Madrosc26',
+    user: 'root',
     host: 'localhost',
     database: 'library',
     port: '3306'
@@ -216,6 +216,18 @@ libDb.getUserLibraries = (userId) => {
         })
     })
 }
+
+libDb.getLibraryBook = (bookId, libId) => {
+    return new Promise((resolve, reject) => { 
+        pool.query(`SELECT * FROM library_books WHERE book_id = ? AND library_id = ?`, [bookId, libId], (err, results) => {
+            if (err) {
+                return reject(err);
+            }
+            return resolve(results);
+        })
+    })
+} 
+
 
 
 

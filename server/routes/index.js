@@ -5,6 +5,7 @@ const db = require('../db')
 const validator = require('../utils')
 const sha256 = require('js-sha256');
 const { json } = require('express');
+const libDb = require('../db');
 
 /**
  * Register a new user
@@ -204,22 +205,6 @@ router.post('/books', async (req, res, next) => {
             break;
         }
     }
-    // booksWithTitle.forEach(async (record, index) => {
-    //     bookAuthors = await db.getBookAuthors(record.book_id)
-    //     if (bookAuthors.length === authorDict.length) {
-    //         // check if match between author ids
-    //         unmatched = false;
-    //         bookAuthors.forEach((a) => {
-    //             if (! a.author_id in author_dict) {
-    //                 unmatched = true;
-    //             }
-    //         });
-    //         if (!unmatched) {
-    //             correctBookId = record.book_id
-    //     }
-       
-    //     }
-    // });
 
     // insert new book entry if above result tells us this record doesn't exist yet
     if (!correctBookId) {
@@ -237,7 +222,13 @@ router.post('/books', async (req, res, next) => {
 
     }
     // add to library with status unread
-    // db.insertBookIntoLibrary(correctBookId, body.lib_id) // also should do a check on this
+    libId = body.lib_id
+    book = await db.getLibraryBook(correctBookId, libId)
+    if (book.length > 0) {
+        res.statusCode = 400
+        res.json({'error': 'book already exists in library'})
+    }
+    await db.insertBookIntoLibrary(correctBookId, libId) 
     res.statusCode = 201
     res.json({'status': 'success'})
 })
