@@ -143,10 +143,10 @@ router.get('/libraries', async (req, res, next) => {
  */
 
 router.post('/books', async (req, res, next) => {
-    // check the user is valid
+    // validate request body
+
     body = req.body
-    let reqFields = ['user_id', 'lib_id', 'authors', 'title', 'genre_id'] //subtitle, publish_date, publisher, edition, cover_img, genre
-    // 'authors' is an array of objects with fields: 'given_name', 'last_name' (optional)
+    let reqFields = ['user_id', 'lib_id', 'authors', 'title', 'genre_id'] // subtitle, publish_date, publisher, edition, cover_img, genre
     let missingField = validator.validateRequiredFields(reqFields, body) 
     
     if (missingField) {
@@ -154,17 +154,17 @@ router.post('/books', async (req, res, next) => {
         res.json({'error': `missing field ${missingField}`});
     }
 
-    authors = body.authors
-    author_dict = {}
-    authors.forEach(async (item, index) => {
+    authorDict = {} //  store author info keyed by author_id
+    body.authors.forEach(async (item, index) => {
         // validate each author object in the list
-        let reqFields = ['given_name']
+        let reqFields = ['given_name'] // optional last_name
         missingField = validator.validateRequiredFields(reqFields, item)
         if (missingField) {
             res.statusCode = 400
             res.json({'error': `missing field ${missingField}`});
         }
-        // check if author exists
+
+        // check if author exists in table
         last_name = item.hasOwnProperty('last_name') ? item.last_name : ''
         existingAuthors = await db.getAuthor(item.given_name, last_name)
         if (existingAuthors.length === 0) {
@@ -174,7 +174,7 @@ router.post('/books', async (req, res, next) => {
         } else {
             item.author_id = existingAuthors[0].author_id
         }
-        author_dict[item.author_id] = item
+        authorDict[item.author_id] = item
     });
 
     // update book table
@@ -184,23 +184,44 @@ router.post('/books', async (req, res, next) => {
     booksWithTitle = await db.booksByTitle(body.title, subtitle);
 
     correctBookId = null
-    booksWithTitle.forEach(async (record, index) => {
-        bookAuthors = await db.getBookAuthors(record.book_id)
-        if (bookAuthors.length === author_dict.length) {
-            // check if match between author ids
-            unmatched = false;
-            bookAuthors.forEach((a) => {
-                if (! a.author_id in author_dict) {
-                    unmatched = true;
+    for (let i = 0; i < booksWithTitle.length; i++) {
+        // get all authors that wrote this book
+        bookAuthors = await db.getBookAuthors(booksWithTitle[i].book_id);
+        // check if these authors match what we're trying to insert
+        // if the book and authors match, then we don't need to 
+        // create another entry in the table
+        authorMismatch = false
+        if (bookAuthors.length === authorDict.length) {
+            for (let j = 0; j < bookAuthors.length; j++) {
+                if (!bookAuthors[j].author_id in authorDict) {
+                    authorMismatch = true;
+                    break;
                 }
-            });
-            if (!unmatched) {
-                correctBookId = record.book_id
+            }
         }
+        if (!authorMismatch) { // this book and author are correct and exist
+            correctBookId = booksWithTitle[i].book_id;
+            break;
+        }
+    }
+    // booksWithTitle.forEach(async (record, index) => {
+    //     bookAuthors = await db.getBookAuthors(record.book_id)
+    //     if (bookAuthors.length === authorDict.length) {
+    //         // check if match between author ids
+    //         unmatched = false;
+    //         bookAuthors.forEach((a) => {
+    //             if (! a.author_id in author_dict) {
+    //                 unmatched = true;
+    //             }
+    //         });
+    //         if (!unmatched) {
+    //             correctBookId = record.book_id
+    //     }
        
-        }
-    });
+    //     }
+    // });
 
+    // insert new book entry if above result tells us this record doesn't exist yet
     if (!correctBookId) {
         pubDate =  body.hasOwnProperty('pub_date') ? body.pub_date : null;
         publisher =  body.hasOwnProperty('publisher') ? body.publisher : '';
@@ -210,15 +231,13 @@ router.post('/books', async (req, res, next) => {
         correctBookId = await db.insertBook(body.title, subtitle, pubDate, publisher, edition, cover_url, genre_id)
         // insert into books and book-author table
 
-        for (const [key, value] of Object.entries(author_dict)) {
+        for (const [key, value] of Object.entries(authorDict)) {
             await db.insertBookAuthor(correctBookId, key)
         }
-        // author_dict.forEach(async (k, v) => {
-        //     await db.insertBookAuthor(correctBookId, k)
-        // });
+
     }
     // add to library with status unread
-    db.insertBookIntoLibrary(correctBookId, body.lib_id)
+    // db.insertBookIntoLibrary(correctBookId, body.lib_id) // also should do a check on this
     res.statusCode = 201
     res.json({'status': 'success'})
 })
