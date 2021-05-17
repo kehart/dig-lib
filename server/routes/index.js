@@ -4,8 +4,10 @@ const router = express.Router();
 const db = require('../db')
 const validator = require('../utils')
 const sha256 = require('js-sha256');
+const jwt = require('jsonwebtoken')
 const { json } = require('express');
 const libDb = require('../db');
+const verify = require('../utils/verify.js')
 
 /**
  * Register a new user
@@ -67,8 +69,8 @@ router.post('/login', async (req, res, next) => {
         given_password_hash = sha256(body.password.toString())
     
         if (stored_password_hash === given_password_hash) {
-            res.statusCode = 200
-            res.json({'status': 'success', 'user_id': users[0].user_id}) // later pass a token
+            const token = jwt.sign({'_id': users[0].user_id}, process.env.TOKEN_SECRET)
+            res.header('auth-token', token).send(token)
         } else {
             res.statusCode = 400
             res.json({'error': 'invalid password'})
@@ -82,12 +84,13 @@ router.post('/login', async (req, res, next) => {
 /**
  * Create a new library for a user
  */
-router.post('/libraries', async (req, res, next) => {
+router.post('/libraries', verify, async (req, res, next) => {
     // name and owner are required
     body = req.body
+    userId = req.jwt._id
 
     // validate owner and lib_name
-    const reqFields = ['owner_id', 'lib_name']
+    const reqFields = ['lib_name']
     missingField = validator.validateRequiredFields(reqFields, body) 
     
     if (missingField) {
@@ -97,21 +100,21 @@ router.post('/libraries', async (req, res, next) => {
 
     // validate that owner exists
     try {
-        let users = await db.getUserById(body.owner_id)
+        let users = await db.getUserById(userId)
         if (users.length === 0) {
             // error no such user exists
             res.statusCode = 403
             res.json({'error': `action forbidden for user`});
         }
         // check that this record does not yet exist
-        let existingLibs = await db.getLibWithName(body.owner_id, body.lib_name);
+        let existingLibs = await db.getLibWithName(userId, body.lib_name);
         if (existingLibs.length > 0) {
             // error, this library already exists for user
             res.statusCode = 400
             res.json({'error': `library with name ${body.lib_name} already exists for user`})
         }
         // insert record
-        await db.createLib(body.owner_id, body.lib_name)
+        await db.createLib(userId, body.lib_name)
         res.statusCode = 201
         res.json({'status': 'success'})
 
@@ -123,17 +126,11 @@ router.post('/libraries', async (req, res, next) => {
 /** 
  * Get all libraries for a user
  */
-router.get('/libraries', async (req, res, next) => {
+router.get('/libraries', verify, async (req, res) => {
     body = req.body
-    const reqFields = ['user_id']
-    let missingField = validator.validateRequiredFields(reqFields, body)
+    userId = req.jwt._id
 
-    if (missingField) {
-        res.statusCode = 400
-        res.json({'error': `missing field ${missingField}`});
-    }
-
-    libraries = await db.getUserLibraries(body.user_id)
+    libraries = await db.getUserLibraries(userId)
     res.statusCode = 200
     res.json({'libraries': libraries})
 });
@@ -143,11 +140,12 @@ router.get('/libraries', async (req, res, next) => {
  * Add a user's book to their library of choice
  */
 
-router.post('/books', async (req, res, next) => {
+router.post('/books', verify, async (req, res) => {
     // validate request body
 
     body = req.body
-    let reqFields = ['user_id', 'lib_id', 'authors', 'title', 'genre_id'] // subtitle, publish_date, publisher, edition, cover_img, genre
+    userId = req.jwt._id
+    let reqFields = ['lib_id', 'authors', 'title', 'genre_id'] // subtitle, publish_date, publisher, edition, cover_img, genre
     let missingField = validator.validateRequiredFields(reqFields, body) 
     
     if (missingField) {
@@ -238,7 +236,7 @@ router.post('/books', async (req, res, next) => {
  * filtering for matching some genre or read status
  * in the future
  */
-router.get('/books', async (req, res, next) => {
+router.get('/books', verify, async (req, res, next) => {
     try {
         let results = await db.all();
         res.json(results);
@@ -250,7 +248,7 @@ router.get('/books', async (req, res, next) => {
 
 /** Create a genre */
 
-router.post('/genres', async(req, res, next) => {
+router.post('/genres', verify, async(req, res, next) => {
     body = req.body
     const reqFields = ['name']
     let missingField = validator.validateRequiredFields(reqFields, body)
@@ -270,7 +268,7 @@ router.post('/genres', async(req, res, next) => {
 /**
  * Get information about a specific book in a user's library
  */
-router.get('/books/:id', async(req, res, next) => {
+router.get('/books/:id', verify, async(req, res, next) => {
     try {
         let results = await db.one(req.params.id);
         res.json(results);
