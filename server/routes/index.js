@@ -7,7 +7,10 @@ const sha256 = require('js-sha256');
 const jwt = require('jsonwebtoken')
 const { json } = require('express');
 const libDb = require('../db');
-const verify = require('../utils/verify.js')
+const verify = require('../utils/verify')
+const mongoDb = require('../db/mongo')
+
+
 
 /**
  * Register a new user
@@ -248,7 +251,7 @@ router.get('/books', verify, async (req, res, next) => {
 
 /** Create a genre */
 
-router.post('/genres', verify, async(req, res, next) => {
+router.post('/genres', async(req, res, next) => {
     body = req.body
     const reqFields = ['name']
     let missingField = validator.validateRequiredFields(reqFields, body)
@@ -268,7 +271,7 @@ router.post('/genres', verify, async(req, res, next) => {
 /**
  * Get information about a specific book in a user's library
  */
-router.get('/books/:id', verify, async(req, res, next) => {
+router.get('/books/:id', verify, async(req, res) => {
     try {
         let results = await db.one(req.params.id);
         res.json(results);
@@ -282,6 +285,43 @@ router.get('/books/:id', verify, async(req, res, next) => {
  * Update read status of a library book
  */
 // TODO
+
+/**
+ * Create a note 
+ */
+router.post('/books/:id/notes', verify, async (req, res) => {
+    try {
+
+        const reqFields = ['lib_id', 'note']
+        let missingField = validator.validateRequiredFields(reqFields, req.body)
+
+        if (missingField) {
+            res.statusCode = 400
+            res.json({'error': `missing field ${missingField}`});
+        }
+
+        userId = req.jwt._id;
+        bookId = req.params.id;
+        libraryId = req.body.lib_id;
+        note = req.body.note
+
+        await mongoDb.createNote(userId, bookId, libraryId, note)
+        res.statusCode = 201
+        res.json({'status': 'success'})
+
+    } catch (e) {
+        console.log(e);
+        res.sendStatus(500);
+    }
+})
+
+/** 
+ * Update a note 
+ */
+
+/**
+ * Share book
+ */ 
 
 
 module.exports = router;
