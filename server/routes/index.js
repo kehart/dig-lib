@@ -315,6 +315,18 @@ router.post('/books/:id/notes', verify, async (req, res) => {
     }
 })
 
+/**
+ * Read notes for book
+ */
+router.get('/libraries/:libId/books/:bookId', verify, async(req, res) => {
+    userId = req.jwt._id;
+    bookId = req.params.bookId;
+    libId = req.params.libId
+    notes = await mongoDb.getNotesForBook(userId, bookId, libId)
+    res.json({'notes': notes})
+
+})
+
 /** 
  * Update a note 
  */

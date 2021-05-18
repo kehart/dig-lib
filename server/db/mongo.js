@@ -23,5 +23,9 @@ db.createNote = async(userId, bookId, libraryId, note) => {
     });
 }
 
+db.getNotesForBook = async(userId, bookId, libraryId) => {
+    return await Note.find({userId: userId, bookId: bookId, libraryId: libraryId})
+};
+
 
 module.exports = db;
